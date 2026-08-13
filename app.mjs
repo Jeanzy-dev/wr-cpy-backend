@@ -78,47 +78,66 @@ client.on('message_create', async (msg) => {
   try {
     const miNumero = client.info?.wid?._serialized;
     const esSaliente = msg.fromMe;
+    const esGrupo = msg.from.includes('@g.us') || msg.to.includes('@g.us');
 
-    // 🔑 EL TRUCO ESTÁ AQUÍ: El chat siempre le pertenece al número de la otra persona (el contacto)
-    let numeroContacto = esSaliente ? msg.to : msg.from;
+    let idChatPrincipal = esGrupo ? (esSaliente ? msg.to : msg.from) : (esSaliente ? msg.to : msg.from);
+    let receptor = esGrupo ? idChatPrincipal : (esSaliente ? idChatPrincipal : miNumero);
+    let nombreRemitente = '';
+    let nombreGrupoOChat = '';
 
-    // Si el mensaje es de un grupo o de difusión, lo manejamos aparte si aplica
-    if (numeroContacto.includes('@g.us')) {
-      // Lógica para grupos si la necesitas
-    }
-
-    let nombreContacto = esSaliente ? 'Tú' : 'Contacto de WhatsApp';
-
-    if (!esSaliente) {
+    if (esGrupo) {
       try {
-        const contact = await msg.getContact();
-        if (contact) {
-          nombreContacto = contact.pushname || contact.name || contact.formattedName || numeroContacto;
+        const chat = await msg.getChat();
+        nombreGrupoOChat = chat.name || 'Grupo de WhatsApp';
+      } catch (e) {
+        nombreGrupoOChat = 'Grupo de WhatsApp';
+      }
+
+      if (esSaliente) {
+        nombreRemitente = 'Tú';
+      } else {
+        // 🔑 Intentamos obtener el nombre del usuario que habló dentro del grupo
+        try {
+          const contact = await msg.getContact();
+          const nombrePersona = contact.pushname || contact.name || contact.formattedName;
+          nombreRemitente = nombrePersona ? `${nombrePersona}` : 'Miembro del Grupo';
+        } catch (e) {
+          nombreRemitente = 'Miembro del Grupo';
         }
-      } catch (e) { }
+      }
     } else {
-      nombreContacto = 'Tú'; // Forzamos el nombre tuyo para los salientes
+      nombreGrupoOChat = esSaliente ? 'Chat Privado' : 'Contacto';
+      if (esSaliente) {
+        nombreRemitente = 'Tú';
+      } else {
+        try {
+          const contact = await msg.getContact();
+          nombreRemitente = contact.pushname || contact.name || contact.formattedName || idChatPrincipal;
+        } catch (e) {
+          nombreRemitente = idChatPrincipal;
+        }
+      }
     }
 
     const textoMensaje = msg.body && msg.body.trim() !== ''
       ? msg.body
       : (msg.hasMedia ? '[Archivo multimedia]' : '[Sin texto]');
 
-    // Guardamos el mensaje unificando el identificador del chat bajo la variable 'sender'
     const newMessage = new Message({
-      sender: numeroContacto,       // 👈 Siempre queda el número del cliente para que se agrupen en el mismo chat
-      senderName: nombreContacto,   // 👈 'Tú' si lo enviaste, o el nombre del contacto si te escribieron
-      receiver: esSaliente ? numeroContacto : miNumero,
+      sender: idChatPrincipal,
+      senderName: esGrupo && !esSaliente ? nombreRemitente : (esSaliente ? 'Tú' : nombreRemitente),
+      chatName: nombreGrupoOChat, // 👈 Guardamos el nombre del grupo aquí
+      receiver: receptor,
       content: textoMensaje,
       timestamp: new Date(msg.timestamp * 1000)
     });
 
     const savedMessage = await newMessage.save();
     io.emit('nuevo_mensaje', savedMessage);
-    console.log(` Mensaje ${esSaliente ? 'saliente' : 'entrante'} sincronizado en el chat de: ${numeroContacto}`);
+    console.log(`💬 Mensaje de ${nombreRemitente} guardado en el grupo: ${nombreGrupoOChat}`);
 
   } catch (error) {
-    console.error('Error procesando mensaje creado:', error);
+    console.error('Error procesando mensaje:', error);
   }
 });
 // 4. Endpoints de la API REST
@@ -135,22 +154,11 @@ app.get('/api/messages', async (req, res) => {
 // Obtener lista de chats únicos con su respectivo nombre y número
 app.get('/api/chats', async (req, res) => {
   try {
-    const chats = await Message.aggregate([
+    const chatsAgrupados = await Message.aggregate([
       { $sort: { timestamp: -1 } },
       {
         $group: {
           _id: '$sender',
-          // Aquí le decimos que si senderName existe y no está vacío lo use, de lo contrario use el número
-          name: {
-            $first: {
-              $cond: [
-                { $and: [{ $ne: ['$senderName', ''] }, { $ne: ['$senderName', null] }] },
-                '$senderName',
-                '$sender'
-              ]
-            }
-          },
-          phone: { $first: '$sender' },
           lastMessage: { $first: '$content' },
           timestamp: { $first: '$timestamp' }
         }
@@ -158,9 +166,39 @@ app.get('/api/chats', async (req, res) => {
       { $sort: { timestamp: -1 } }
     ]);
 
-    res.json(chats);
+    const chatsConNombre = await Promise.all(chatsAgrupados.map(async (chat) => {
+      let nombreMostrado = chat._id;
+
+      try {
+        if (chat._id.includes('@g.us')) {
+          const grupoChat = await client.getChatById(chat._id);
+          if (grupoChat && grupoChat.name) {
+            nombreMostrado = grupoChat.name;
+          }
+        } else {
+          const contacto = await client.getContactById(chat._id);
+          if (contacto && (contacto.pushname || contacto.name)) {
+            nombreMostrado = contacto.pushname || contacto.name;
+          }
+        }
+      } catch (e) {
+        // Si es un grupo y falla la API de wwebjs, le ponemos un nombre temporal estético en vez del ID
+        if (chat._id.includes('@g.us')) {
+          nombreMostrado = 'Grupo de WhatsApp';
+        }
+      }
+
+      return {
+        id: chat._id,
+        name: nombreMostrado,
+        lastMessage: chat.lastMessage,
+        timestamp: chat.timestamp
+      };
+    }));
+
+    res.json(chatsConNombre);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener la lista de chats', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
