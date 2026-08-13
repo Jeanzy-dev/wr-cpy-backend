@@ -74,57 +74,51 @@ io.on('connection', (socket) => {
 
 // Evento: Escuchar mensajes entrantes de WhatsApp
 // Evento: Escuchar mensajes entrantes de WhatsApp
-client.on('message', async (msg) => {
+client.on('message_create', async (msg) => {
   try {
-    let nombreContacto = '';
-    let numeroReal = msg.from;
+    const miNumero = client.info?.wid?._serialized;
+    const esSaliente = msg.fromMe;
 
-    try {
-      const contact = await msg.getContact();
-      if (contact) {
-        numeroReal = contact.id?._serialized || msg.from;
-        // Obtenemos el nombre real, pushname o el número limpio
-        nombreContacto = contact.pushname || contact.name || contact.formattedName || '';
-      }
-    } catch (e) { }
+    // 🔑 EL TRUCO ESTÁ AQUÍ: El chat siempre le pertenece al número de la otra persona (el contacto)
+    let numeroContacto = esSaliente ? msg.to : msg.from;
 
-    try {
-      const chat = await msg.getChat();
-      if (chat && chat.name && chat.name !== msg.from) {
-        nombreContacto = chat.name || nombreContacto;
-      }
-    } catch (e) { }
+    // Si el mensaje es de un grupo o de difusión, lo manejamos aparte si aplica
+    if (numeroContacto.includes('@g.us')) {
+      // Lógica para grupos si la necesitas
+    }
 
-    // Si de plano no hay nombre, sacamos el número o una etiqueta limpia
-    if (!nombreContacto || nombreContacto === numeroReal) {
-      if (msg.from.includes('@lid')) {
-        nombreContacto = 'Dispositivo / LID';
-      } else if (msg.from.includes('@g.us')) {
-        nombreContacto = 'Grupo de WhatsApp';
-      } else {
-        nombreContacto = numeroReal.replace('@c.us', '');
-      }
+    let nombreContacto = esSaliente ? 'Tú' : 'Contacto de WhatsApp';
+
+    if (!esSaliente) {
+      try {
+        const contact = await msg.getContact();
+        if (contact) {
+          nombreContacto = contact.pushname || contact.name || contact.formattedName || numeroContacto;
+        }
+      } catch (e) { }
+    } else {
+      nombreContacto = 'Tú'; // Forzamos el nombre tuyo para los salientes
     }
 
     const textoMensaje = msg.body && msg.body.trim() !== ''
       ? msg.body
       : (msg.hasMedia ? '[Archivo multimedia]' : '[Sin texto]');
 
-    // Guardamos el mensaje nuevo
+    // Guardamos el mensaje unificando el identificador del chat bajo la variable 'sender'
     const newMessage = new Message({
-      sender: numeroReal,
-      senderName: nombreContacto && nombreContacto !== numeroReal ? nombreContacto : 'Alguien', // Forzamos un nombre si viene crudo
-      receiver: client.info?.wid?._serialized || 'bot',
+      sender: numeroContacto,       // 👈 Siempre queda el número del cliente para que se agrupen en el mismo chat
+      senderName: nombreContacto,   // 👈 'Tú' si lo enviaste, o el nombre del contacto si te escribieron
+      receiver: esSaliente ? numeroContacto : miNumero,
       content: textoMensaje,
       timestamp: new Date(msg.timestamp * 1000)
     });
 
     const savedMessage = await newMessage.save();
     io.emit('nuevo_mensaje', savedMessage);
-    console.log(` Mensaje guardado de: ${nombreContacto} (${numeroReal})`);
+    console.log(` Mensaje ${esSaliente ? 'saliente' : 'entrante'} sincronizado en el chat de: ${numeroContacto}`);
 
   } catch (error) {
-    console.error('Error crítico en evento message:', error);
+    console.error('Error procesando mensaje creado:', error);
   }
 });
 // 4. Endpoints de la API REST
@@ -147,14 +141,14 @@ app.get('/api/chats', async (req, res) => {
         $group: {
           _id: '$sender',
           // Aquí le decimos que si senderName existe y no está vacío lo use, de lo contrario use el número
-          name: { 
-            $first: { 
+          name: {
+            $first: {
               $cond: [
                 { $and: [{ $ne: ['$senderName', ''] }, { $ne: ['$senderName', null] }] },
                 '$senderName',
                 '$sender'
-              ] 
-            } 
+              ]
+            }
           },
           phone: { $first: '$sender' },
           lastMessage: { $first: '$content' },

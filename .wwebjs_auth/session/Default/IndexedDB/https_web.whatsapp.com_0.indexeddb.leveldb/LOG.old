@@ -1,26 +1,3 @@
-2026/08/13-05:24:54.195 bc0 Reusing MANIFEST C:\Users\Jeancito\Desktop\ws-pr\.wwebjs_auth\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
-2026/08/13-05:24:54.196 bc0 Recovering log #410
-2026/08/13-05:24:54.232 bc0 Reusing old log C:\Users\Jeancito\Desktop\ws-pr\.wwebjs_auth\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000410.log 
-2026/08/13-05:25:02.842 bc0 Level-0 table #428: started
-2026/08/13-05:25:02.874 bc0 Level-0 table #428: 1179257 bytes OK
-2026/08/13-05:25:02.876 bc0 Delete type=0 #410
-2026/08/13-05:25:02.880 bc0 Compacting 1@0 + 1@1 files
-2026/08/13-05:25:02.984 bc0 Generated table #429@0: 22758 keys, 533179 bytes
-2026/08/13-05:25:03.003 bc0 Generated table #430@0: 92 keys, 2861 bytes
-2026/08/13-05:25:03.004 bc0 Compacted 1@0 + 1@1 files => 536040 bytes
-2026/08/13-05:25:03.005 bc0 compacted to: files[ 0 2 15 0 0 0 0 ]
-2026/08/13-05:25:03.240 bc0 Compacting 1@1 + 10@2 files
-2026/08/13-05:25:03.303 bc0 Generated table #431@1: 60146 keys, 2240356 bytes
-2026/08/13-05:25:03.348 bc0 Generated table #432@1: 2334 keys, 2146004 bytes
-2026/08/13-05:25:03.394 bc0 Generated table #433@1: 2410 keys, 2154960 bytes
-2026/08/13-05:25:03.421 bc0 Generated table #434@1: 2065 keys, 2142057 bytes
-2026/08/13-05:25:03.443 bc0 Generated table #435@1: 2328 keys, 2148211 bytes
-2026/08/13-05:25:03.475 bc0 Generated table #436@1: 2320 keys, 2152928 bytes
-2026/08/13-05:25:03.530 bc0 Generated table #437@1: 15835 keys, 2177665 bytes
-2026/08/13-05:25:03.650 bc0 Generated table #438@1: 26920 keys, 2269791 bytes
-2026/08/13-05:25:03.750 bc0 Generated table #439@1: 20632 keys, 2232202 bytes
-2026/08/13-05:25:03.810 bc0 Generated table #440@1: 27836 keys, 2156306 bytes
-2026/08/13-05:25:03.825 bc0 Generated table #441@1: 10765 keys, 211218 bytes
-2026/08/13-05:25:03.825 bc0 Compacted 1@1 + 10@2 files => 22031698 bytes
-2026/08/13-05:25:03.826 bc0 compacted to: files[ 0 1 16 0 0 0 0 ]
-2026/08/13-05:25:03.827 bc0 Delete type=2 #428
+2026/08/13-08:07:17.584 4cd4 Reusing MANIFEST C:\Users\Jeancito\Desktop\ws-pr\.wwebjs_auth\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/08/13-08:07:17.586 4cd4 Recovering log #445
+2026/08/13-08:07:17.596 4cd4 Reusing old log C:\Users\Jeancito\Desktop\ws-pr\.wwebjs_auth\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000445.log 
