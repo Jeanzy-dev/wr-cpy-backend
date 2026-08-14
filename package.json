@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.mjs",
+    "dev": "node app.mjs",
+    "tunnel": "cross-env NODE_ENV=production node app.mjs"
   },
   "keywords": [],
   "author": "",
@@ -12,11 +15,16 @@
   "type": "module",
   "dependencies": {
     "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "mongoose": "^9.9.2",
+    "multer": "^2.2.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "socket.io": "^4.8.3",
     "whatsapp-web.js": "^1.34.7"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
   }
 }

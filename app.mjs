@@ -1,81 +1,90 @@
+import 'dotenv/config';
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
-import cors from 'cors';
+import mongoose from 'mongoose';
 import pkg from 'whatsapp-web.js';
+import qrcode from 'qrcode-terminal';
+import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+
 const { Client, LocalAuth } = pkg;
-import qrcodeTerminal from 'qrcode-terminal';
-import QRCode from 'qrcode';
 
-import { connectDB } from './config/db.js';
-import { Message } from './models/Message.js';
-
+// Configuración de Express y Servidor HTTP
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-// 1. Crear servidor HTTP e integrar Socket.io con CORS libre para Angular
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
-});
-
-let qrCodeData = '';
-
 app.use(cors());
 app.use(express.json());
 
-// 2. Conectar a MongoDB
-connectDB();
-
-// 3. Configurar WhatsApp Web
-const client = new Client({
-  authStrategy: new LocalAuth(),
-  puppeteer: {
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--disable-gpu'
-    ]
-  },
-  webVersionCache: {
-    type: 'remote',
-    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1014111620-alpha.html'
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
   }
 });
 
-// Evento: Generar QR
+// Configuración de Multer para la carpeta uploads/
+const uploadDir = 'uploads';
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+
+// Hacer pública la carpeta uploads para poder ver las imágenes
+app.use('/uploads', express.static('uploads'));
+
+// Conexión a MongoDB
+mongoose.connect('mongodb://127.0.0.1:27017/whatsapp_monitor')
+  .then(() => console.log('📦 Conectado a MongoDB'))
+  .catch(err => console.error('Error conectando a MongoDB:', err));
+
+// Modelo de Mongoose
+const messageSchema = new mongoose.Schema({
+  sender: { type: String, required: true },
+  senderName: { type: String, default: '' },
+  chatName: { type: String, default: '' },
+  receiver: { type: String, required: true },
+  content: { type: String, required: true },
+  timestamp: { type: Date, required: true }
+});
+
+const Message = mongoose.model('Message', messageSchema);
+
+// Inicialización de WhatsApp Client
+const client = new Client({
+  authStrategy: new LocalAuth()
+});
+
 client.on('qr', (qr) => {
-  console.log(' Escanea este código QR con tu WhatsApp:');
-  qrcodeTerminal.generate(qr, { small: true });
-
-  QRCode.toDataURL(qr, (err, url) => {
-    if (!err) qrCodeData = url;
-  });
+  console.log('Escanea este código QR con tu celular:');
+  qrcode.generate(qr, { small: true });
 });
 
-// Evento: Listo
 client.on('ready', () => {
-  console.log(' ¡WhatsApp Web está conectado y listo!');
-  qrCodeData = '';
+  console.log('¡WhatsApp conectado y listo!');
 });
 
-// Evento: Socket.io conexión de clientes (Frontend)
-io.on('connection', (socket) => {
-  console.log(' Cliente de Angular conectado por WebSockets. Socket ID:', socket.id);
-});
-
-// Evento: Escuchar mensajes entrantes de WhatsApp
-// Evento: Escuchar mensajes entrantes de WhatsApp
+// Listener de mensajes unificados (Privados y Grupos)
 client.on('message_create', async (msg) => {
   try {
+    // FILTRO: Ignorar los estados o historias de WhatsApp de una vez
+    if (msg.from === 'status@broadcast' || msg.to === 'status@broadcast') {
+      return;
+    }
+
     const miNumero = client.info?.wid?._serialized;
     const esSaliente = msg.fromMe;
     const esGrupo = msg.from.includes('@g.us') || msg.to.includes('@g.us');
@@ -96,7 +105,6 @@ client.on('message_create', async (msg) => {
       if (esSaliente) {
         nombreRemitente = 'Tú';
       } else {
-        // 🔑 Intentamos obtener el nombre del usuario que habló dentro del grupo
         try {
           const contact = await msg.getContact();
           const nombrePersona = contact.pushname || contact.name || contact.formattedName;
@@ -119,14 +127,34 @@ client.on('message_create', async (msg) => {
       }
     }
 
-    const textoMensaje = msg.body && msg.body.trim() !== ''
-      ? msg.body
-      : (msg.hasMedia ? '[Archivo multimedia]' : '[Sin texto]');
+    // Procesamiento seguro y limpio para evitar bloqueos multimedia
+    let textoMensaje = msg.body && msg.body.trim() !== '' ? msg.body : '';
+
+    if (msg.hasMedia) {
+      try {
+        const media = await msg.downloadMedia();
+        if (media && media.data) {
+          const extension = media.mimetype ? media.mimetype.split('/')[1] : 'jpg';
+          const filename = `whatsapp-${Date.now()}-${Math.round(Math.random() * 1E9)}.${extension}`;
+          const filepath = path.join('uploads', filename);
+
+          fs.writeFileSync(filepath, Buffer.from(media.data, 'base64'));
+          textoMensaje = `uploads/${filename}`;
+        } else {
+          textoMensaje = '[Archivo multimedia]';
+        }
+      } catch (e) {
+        // Dejamos un identificador limpio para saber que multimedia llegó pero está protegida
+        textoMensaje = '[Archivo multimedia protegido]';
+      }
+    } else if (!textoMensaje) {
+      textoMensaje = '[Sin texto]';
+    }
 
     const newMessage = new Message({
       sender: idChatPrincipal,
       senderName: esGrupo && !esSaliente ? nombreRemitente : (esSaliente ? 'Tú' : nombreRemitente),
-      chatName: nombreGrupoOChat, // 👈 Guardamos el nombre del grupo aquí
+      chatName: nombreGrupoOChat,
       receiver: receptor,
       content: textoMensaje,
       timestamp: new Date(msg.timestamp * 1000)
@@ -134,24 +162,20 @@ client.on('message_create', async (msg) => {
 
     const savedMessage = await newMessage.save();
     io.emit('nuevo_mensaje', savedMessage);
-    console.log(`💬 Mensaje de ${nombreRemitente} guardado en el grupo: ${nombreGrupoOChat}`);
+    console.log(`💬 Mensaje procesado en el hilo: ${idChatPrincipal}`);
 
   } catch (error) {
     console.error('Error procesando mensaje:', error);
   }
 });
-// 4. Endpoints de la API REST
-app.get('/api/messages', async (req, res) => {
-  try {
-    const { sender } = req.query;
-    const messages = await Message.find({ sender }).sort({ timestamp: 1 });
-    res.json(messages);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-// Obtener lista de chats únicos con su respectivo nombre y número
-// Obtener lista de chats únicos con su respectivo nombre y número
+
+client.initialize();
+
+// ==========================================
+// ENDPOINTS DE LA API
+// ==========================================
+
+// Obtener lista de chats unificados
 app.get('/api/chats', async (req, res) => {
   try {
     const chatsAgrupados = await Message.aggregate([
@@ -159,6 +183,7 @@ app.get('/api/chats', async (req, res) => {
       {
         $group: {
           _id: '$sender',
+          name: { $first: '$chatName' },
           lastMessage: { $first: '$content' },
           timestamp: { $first: '$timestamp' }
         }
@@ -166,44 +191,55 @@ app.get('/api/chats', async (req, res) => {
       { $sort: { timestamp: -1 } }
     ]);
 
-    const chatsConNombre = await Promise.all(chatsAgrupados.map(async (chat) => {
-      let nombreMostrado = chat._id;
-
-      try {
-        if (chat._id.includes('@g.us')) {
-          const grupoChat = await client.getChatById(chat._id);
-          if (grupoChat && grupoChat.name) {
-            nombreMostrado = grupoChat.name;
-          }
-        } else {
-          const contacto = await client.getContactById(chat._id);
-          if (contacto && (contacto.pushname || contacto.name)) {
-            nombreMostrado = contacto.pushname || contacto.name;
-          }
-        }
-      } catch (e) {
-        // Si es un grupo y falla la API de wwebjs, le ponemos un nombre temporal estético en vez del ID
-        if (chat._id.includes('@g.us')) {
-          nombreMostrado = 'Grupo de WhatsApp';
-        }
-      }
-
-      return {
-        id: chat._id,
-        name: nombreMostrado,
-        lastMessage: chat.lastMessage,
-        timestamp: chat.timestamp
-      };
+    const formattedChats = chatsAgrupados.map(chat => ({
+      id: chat._id,
+      name: chat._id.includes('@g.us')
+        ? (chat.name && chat.name !== 'Chat Privado' ? chat.name : 'Grupo de WhatsApp')
+        : (chat.name && chat.name !== 'Grupo de WhatsApp' ? chat.name : chat._id),
+      lastMessage: chat.lastMessage,
+      timestamp: chat.timestamp
     }));
 
-    res.json(chatsConNombre);
+    res.json(formattedChats);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// 5. Iniciar servidor usando server.listen (Obligatorio para Socket.io)
+// Obtener mensajes de un chat específico
+app.get('/api/messages/:chatId', async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const messages = await Message.find({ sender: chatId }).sort({ timestamp: 1 });
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint para subir imágenes/archivos con Multer
+app.post('/api/upload', upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: '¡Eche, no subiste ninguna imagen, mi llave!' });
+    }
+    res.json({
+      message: 'Imagen guardada con éxito',
+      filePath: req.file.path,
+      filename: req.file.filename
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Configuración de puertos y entorno (Inyección por comandos)
+const PORT = process.env.PORT || 3000;
+const PUBLIC_URL = process.env.NODE_ENV === 'production'
+  ? 'https://kdldzng6-3000.use2.devtunnels.ms'
+  : `http://localhost:${PORT}`;
+
 server.listen(PORT, () => {
-  console.log(` Servidor y WebSockets corriendo en http://localhost:${PORT}`);
-  client.initialize();
+  console.log(`🚀 Servidor corriendo en modo: ${process.env.NODE_ENV || 'desarrollo'}`);
+  console.log(`🔗 Acceso disponible en: ${PUBLIC_URL}`);
 });
