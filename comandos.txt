@@ -1,2 +1,0 @@
-local: npm run dev
-devtunnels: npm run tunnel
