@@ -8,7 +8,7 @@
     "start": "node src/server.js",
     "dev": "node --watch-path=src src/server.js",
     "install:chrome": "node node_modules/puppeteer/install.mjs",
-    "render-build": "npm install && node node_modules/puppeteer/install.mjs",
+    "render-build": "rm -rf .cache/puppeteer && npm install",
     "postinstall": "node node_modules/puppeteer/install.mjs"
   },
   "engines": {
