@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { resolveChromePath } from './chromePath.js';
 
 const env = process.env;
 const databaseUrl = env.DATABASE_URL || '';
@@ -37,7 +38,7 @@ export const config = {
   waDataPath: env.WA_DATA_PATH || './.wwebjs_auth',
   waBackupIntervalMs: Math.max(60000, Number(env.WA_BACKUP_INTERVAL_MS || 300000)),
   headless: bool(env.HEADLESS, true),
-  chromePath: env.PUPPETEER_EXECUTABLE_PATH || undefined,
+  chromePath: resolveChromePath(),
 
   // Sincronización del historial al conectar
   syncChatsLimit: Number(env.SYNC_CHATS_LIMIT ?? 30),

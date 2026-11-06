@@ -1,11 +1,10 @@
 const { join } = require('path');
 
 /**
- * En Render la caché por defecto de Puppeteer (~/.cache/puppeteer) no se conserva entre
- * el build y la ejecución, así que Chrome se instala dentro del proyecto.
- * En local se usa la caché normal del usuario.
+ * Forzar la ruta de caché en .cache/puppeteer para que tanto en el build
+ * como en runtime Puppeteer busque exactamente en la misma carpeta del proyecto.
  * @type {import("puppeteer").Configuration}
  */
-module.exports = process.env.RENDER
-  ? { cacheDirectory: join(__dirname, '.cache', 'puppeteer') }
-  : {};
+module.exports = {
+  cacheDirectory: join(__dirname, '.cache', 'puppeteer'),
+};
