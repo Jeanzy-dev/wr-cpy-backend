@@ -8,8 +8,8 @@
     "start": "node src/server.js",
     "dev": "node --watch-path=src src/server.js",
     "install:chrome": "puppeteer browsers install chrome",
-    "render-build": "npm install && npx puppeteer browsers install chrome",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "render-build": "rm -rf .cache/puppeteer && npm install && npx @puppeteer/browsers install chrome@146.0.7680.31 --path ./.cache/puppeteer",
+    "postinstall": "npx @puppeteer/browsers install chrome@146.0.7680.31 --path ./.cache/puppeteer"
   },
   "engines": {
     "node": ">=20"
