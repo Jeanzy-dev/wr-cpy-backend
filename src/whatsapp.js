@@ -365,25 +365,34 @@ function buildClient() {
         })
       : new LocalAuth({ dataPath: config.waDataPath });
 
+  const puppeteerOpts = {
+    headless: config.headless,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-extensions',
+      '--no-first-run',
+      '--no-default-browser-check',
+    ],
+  };
+
+  const executablePath = config.chromePath;
+  if (executablePath) {
+    puppeteerOpts.executablePath = executablePath;
+    console.log(`🧭 Usando Chrome en: ${executablePath}`);
+  } else {
+    console.log('🧭 Usando Chrome por defecto de Puppeteer');
+  }
+
   return new Client({
     authStrategy,
     webVersionCache: {
       type: 'remote',
       remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1046916940-alpha.html',
     },
-    puppeteer: {
-      headless: config.headless,
-      executablePath: config.chromePath,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--no-first-run',
-        '--no-default-browser-check',
-      ],
-    },
+    puppeteer: puppeteerOpts,
   });
 }
 
