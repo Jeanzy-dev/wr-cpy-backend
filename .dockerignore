@@ -1,0 +1,9 @@
+node_modules/
+.env
+.wwebjs_auth/
+.wwebjs_cache/
+.pgdata/
+.cache/
+uploads/
+*.zip
+*.log
